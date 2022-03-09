@@ -21,6 +21,8 @@ const defaultOptions = {
   include: ["/"],
   // If you get a Timeout error, ignore and move on
   fastFail: true,
+  // networkIdle
+  puppeteerNetworkIdle: undefined,
   userAgent: "ReactSnap",
   // 4 params below will be refactored to one: `puppeteer: {}`
   // https://github.com/stereobooster/react-snap/issues/120

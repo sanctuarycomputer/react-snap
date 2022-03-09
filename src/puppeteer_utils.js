@@ -11,6 +11,39 @@ const errorToString = jsHandle =>
 
 const objectToJson = jsHandle => jsHandle.jsonValue();
 
+function waitForNetworkIdle(page, timeout, maxInflightRequests = 0) {
+  page.on('request', onRequestStarted);
+  page.on('requestfinished', onRequestFinished);
+  page.on('requestfailed', onRequestFinished);
+
+  let inflight = 0;
+  let fulfill;
+  let promise = new Promise(x => fulfill = x);
+  let timeoutId = setTimeout(onTimeoutDone, timeout);
+  return promise;
+
+  function onTimeoutDone() {
+    page.removeListener('request', onRequestStarted);
+    page.removeListener('requestfinished', onRequestFinished);
+    page.removeListener('requestfailed', onRequestFinished);
+    fulfill();
+  }
+
+  function onRequestStarted() {
+    ++inflight;
+    if (inflight > maxInflightRequests)
+      clearTimeout(timeoutId);
+  }
+
+  function onRequestFinished() {
+    if (inflight === 0)
+      return;
+    --inflight;
+    if (inflight === maxInflightRequests)
+      timeoutId = setTimeout(onTimeoutDone, timeout);
+  }
+}
+
 /**
  * @param {{page: Page, options: {skipThirdPartyRequests: true}, basePath: string }} opt
  * @return {Promise<void>}
@@ -240,7 +273,14 @@ const crawl = async opt => {
         await page.setUserAgent(options.userAgent);
         const tracker = createTracker(page);
         try {
-          await page.goto(pageUrl, { waitUntil: "networkidle0" });
+          if (options.puppeteerNetworkIdle) {
+            await Promise.all([
+              page.goto(pageUrl),
+              waitForNetworkIdle(page, options.puppeteerNetworkIdle.timeout, options.puppeteerNetworkIdle.maxRequests),
+            ]);
+          } else {
+            await page.goto(pageUrl, { waitUntil: "networkidle0" });
+          }
         } catch (e) {
           e.message = augmentTimeoutError(e.message, tracker);
           if (opt.fastFail) {
